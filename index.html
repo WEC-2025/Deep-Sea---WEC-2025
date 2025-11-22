@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Abyssal Explorer</title>
+
+  <style>
+    /* ===========================
+       GLOBAL PAGE STYLES
+       =========================== */
+    body {
+      background-color: #050510;  /* deep sea black/blue */
+      color: #00ffcc;             /* sci-fi HUD text color */
+      font-family: "Courier New", monospace;
+      text-align: center;
+      margin: 0;
+      padding: 16px;
+    }
+
+    /* ===========================
+       HUD PANEL (TOP CENTER)
+       =========================== */
+    #hud-panel {
+      border-bottom: 2px solid #00ffcc;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    #hud-panel h1 {
+      margin: 0 0 8px 0;
+    }
+
+    .stat-box {
+      display: inline-block;
+      padding: 8px 12px;
+      border: 1px solid #00ffcc;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      text-align: left;
+    }
+
+    .stat-box p {
+      margin: 2px 0;
+    }
+
+    .stat-box span {
+      color: #ffffff;
+    }
+
+    .mission-box {
+      margin-top: 8px;
+    }
+
+    /* ===========================
+       LEGEND PANEL (TOP RIGHT)
+       =========================== */
+    #legend-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 190px;
+
+      background: rgba(5, 5, 20, 0.9);
+      border: 2px solid #00ffcc;
+      border-radius: 8px;
+
+      padding: 10px 12px;
+      color: #00ffcc;
+      font-family: "Courier New", monospace;
+      font-size: 14px;
+
+      z-index: 999; /* stays above map */
+    }
+
+    #legend-panel h2 {
+      margin: 0 0 6px 0;
+      font-size: 18px;
+      text-align: center;
+      text-shadow: 0 0 8px #00ffcc;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 6px 0;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      border: 1px solid #00ffcc;
+      box-sizing: border-box;
+    }
+
+    .legend-symbol {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .legend-hazard-box {
+      width: 18px;
+      height: 18px;
+      border: 2px solid red;
+      margin-right: 8px;
+      box-sizing: border-box;
+    }
+
+    /* ===========================
+       GRID / MAP LAYOUT
+       =========================== */
+    #game-container {
+      display: inline-block;
+      border: 2px solid #00ffcc;
+      margin-top: 20px;
+      background-color: #000;
+      font-size: 0;          /* remove gaps between inline-block tiles */
+    }
+
+    .map-row {
+      display: block;
+      height: 24px;          /* exactly one tile tall */
+      white-space: nowrap;   /* prevent tiles from wrapping */
+    }
+
+    .map-tile {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      box-sizing: border-box;
+      border: 1px solid #1a1a2e;  /* base grid border */
+      margin: 0;
+      padding: 0;
+      position: relative;         /* for ::after + icons */
+    }
+
+    /* Biome colors mapped from CSV biome names */
+    .biome-plain        { background-color: #0b1026; }
+    .biome-slope        { background-color: #1e3a5f; }
+    .biome-seamount     { background-color: #2e5f5f; }
+    .biome-trench       { background-color: #000000; }
+    .biome-hydrothermal { background-color: #3b1e1e; }
+
+    /* Hazard highlight: red box INSIDE the tile (doesn’t change size) */
+    .hazard {
+      border-color: #1a1a2e; /* keep same physical border */
+    }
+
+    .hazard::after {
+      content: "";
+      position: absolute;
+      inset: 2px;               /* padding from edge */
+      border: 2px solid red;    /* thick red box */
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+
+    /* Submarine icon centered in the tile */
+    .submarine {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      filter: drop-shadow(0 0 5px #fff);
+      animation: pulse 2s infinite;
+    }
+
+    /* POI marker in bottom-right of tile */
+    .icon {
+      position: absolute;
+      right: 2px;
+      bottom: 1px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+    .predator-icon {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    /* ===========================
+       MOVEMENT CONTROLS
+       =========================== */
+    .controls {
+      margin-top: 16px;
+    }
+
+    .horizontal {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 4px 0;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 8px 16px;
+      background: #004433;
+      color: white;
+      text-decoration: none;
+      margin: 2px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn:hover {
+      background: #006655;
+    }
+
+    /* ===========================
+       AI ASSISTANT + HINT BUTTON
+       =========================== */
+    .ai-box {
+      background: rgba(0,0,0,0.7);
+      color: #e5e7eb;
+      border-left: 4px solid #4fc3f7;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      min-height: 40px;
+      font-size: 13px;
+    }
+
+    .ai-box.visible {
+      opacity: 1;
+    }
+
+    .hint-btn {
+      background: #ff9800;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    .hint-btn:hover {
+      background: #e68900;
+    }
+
+    /* ===========================
+       MISSION SELECT OVERLAY
+       =========================== */
+    .mission-select {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;  /* hidden by default */
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 1000;
+      color: #f9fafb;
+    }
+
+    .mission-select h2 {
+      margin-bottom: 8px;
+    }
+
+    .mission-btn {
+      padding: 10px 18px;
+      font-size: 16px;
+      color: white;
+      background: #4caf50;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .mission-btn:hover {
+      background: #43a047;
+    }
+
+    /* ===========================
+       DEBUG LOG
+       =========================== */
+    #log {
+      text-align: left;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #9ca3af;
+      max-height: 250px;
+      overflow: auto;
+    }
+
+        /* ===========================
+       GAME OVER OVERLAY
+       =========================== */
+    #game-over-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;               /* hidden until game over */
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      color: #00ffcc;
+      font-family: "Courier New", monospace;
+    }
+
+    .game-over-box {
+      border: 2px solid #00ffcc;
+      border-radius: 8px;
+      padding: 20px 30px;
+      text-align: center;
+      background: #050510;
+      box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
+    }
+
+    .game-over-box h1 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 28px;
+      color: #ff4c4c;
+      text-shadow: 0 0 10px #ff4c4c;
+    }
+
+    .game-over-box p {
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- LEGEND PANEL (top-right) -->
+  <div id="legend-panel">
+    <h2>LEGEND</h2>
+
+    <div class="legend-item">
+      <span class="legend-color" style="background:#0b1026;"></span>
+      <p>Abyssal Plain</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-color" style="background:#1e3a5f;"></span>
+      <p>Continental Slope</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-color" style="background:#2e5f5f;"></span>
+      <p>Seamount / Ridge</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-color" style="background:#000000; border:1px solid #00ffcc;"></span>
+      <p>Trench</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-color" style="background:#3b1e1e;"></span>
+      <p>Hydrothermal Vent Field</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-symbol">📍</span>
+      <p>Point of Interest</p>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-symbol">🚢</span>
+      <p>Your Submarine</p>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-hazard-box"></div>
+      <p>Hazard Zone</p>
+    </div>
+  </div>
+
+  <!-- HUD PANEL (top center) -->
+  <div id="hud-panel">
+    <h1>SUBMARINE SYSTEMS</h1>
+
+    <div class="stat-box">
+      <p>DEPTH: <span id="hud-depth">-- m</span></p>
+      <p>PRESSURE: <span id="hud-pressure">-- atm</span></p>
+      <p>TEMP: <span id="hud-temp">-- °C</span></p>
+      <p>HULL INTEGRITY: <span id="hud-health">100%</span></p>
+      <p>BATTERY/HUNGER: <span id="hud-hunger">100%</span></p>
+    </div>
+
+    <div class="mission-box">
+      <p>CURRENT MISSION: <span id="missionText"><em>No mission active.</em></span></p>
+    </div>
+
+    <!-- AI assistant message panel -->
+    <div id="aiPanel" class="ai-box"></div>
+
+    <!-- Hint button -->
+    <button id="hintButton" class="hint-btn">Request Hint</button>
+  </div>
+
+  <!-- Full-screen mission select overlay -->
+  <div id="missionSelectScreen" class="mission-select">
+    <h2>Select a Mission</h2>
+    <!-- UI_setupMissionSelect() will inject mission buttons here -->
+  </div>
+
+    <!-- GAME OVER OVERLAY -->
+  <div id="game-over-overlay">
+    <div class="game-over-box">
+      <h1>HULL BREACH</h1>
+      <p id="game-over-message">Hull integrity reached 0%. Mission failed.</p>
+      <button id="restartButton" class="btn">Restart</button>
+    </div>
+  </div>
+  <!-- MAP GRID (filled by renderer.js) -->
+  <div id="game-container"></div>
+
+  <!-- MOVEMENT CONTROLS -->
+  <div class="controls">
+    <div>
+      <button id="btn-up" class="btn">⬆️ N</button>
+    </div>
+    <div class="horizontal">
+      <button id="btn-left" class="btn">⬅️ W</button>
+      <button id="btn-right" class="btn">➡️ E</button>
+    </div>
+    <div>
+      <button id="btn-down" class="btn">⬇️ S</button>
+    </div>
+  </div>
+
+  <!-- DEBUG LOG -->
+  <pre id="log"></pre>
+
+  <!-- Load helper scripts (globals), then main module -->
+  <script src="js/assistant.js"></script>
+  <script src="js/missions.js"></script>
+  <script src="js/UI.js"></script>
+  <script src="js/facts.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
