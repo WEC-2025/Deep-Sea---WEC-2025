@@ -1,9 +1,10 @@
 // js/renderer.js
 // Renders the full grid into #game-container and updates tiles
-// with biome color, hazards, POIs, predator icon, and submarine position.
+// with biome color, hazards, POIs, predator icon, submarine position,
+// and fog-of-war using a visibility grid.
 
 export function initRenderer(world, metadata, stats, options = {}) {
-  const { playerState, onCellSelected } = options;
+  const { playerState, visibility, onCellSelected } = options;
 
   const container = document.getElementById("game-container");
   container.innerHTML = ""; // clear whatever was there
@@ -46,9 +47,25 @@ export function initRenderer(world, metadata, stats, options = {}) {
     const tile = tiles[r][c];
     const cell = world[r][c];
 
-    // reset classes & content
+    const vis =
+      visibility && visibility[r] && visibility[r][c]
+        ? visibility[r][c]
+        : null;
+
     tile.className = "map-tile";
     tile.innerHTML = "";
+
+    // --------------------------------
+    // FOG OF WAR HANDLING
+    // --------------------------------
+    if (vis && !vis.discovered) {
+      // Never seen: pure black box, no info
+      tile.classList.add("fog-unknown");
+      return;
+    }
+
+    const isShadowed = vis && !vis.visible;
+    const canShowIcons = !isShadowed;
 
     if (!cell) return;
 
@@ -71,6 +88,11 @@ export function initRenderer(world, metadata, stats, options = {}) {
       }
     }
 
+    // If this tile is "seen but not currently visible", darken it
+    if (isShadowed) {
+      tile.classList.add("fog-seen");
+    }
+
     // -----------------------
     // Hazards (red border)
     // -----------------------
@@ -81,7 +103,7 @@ export function initRenderer(world, metadata, stats, options = {}) {
     // -----------------------
     // POI marker (📍 bottom-right)
     // -----------------------
-    if (cell.poi && cell.poi.length > 0) {
+    if (canShowIcons && cell.poi && cell.poi.length > 0) {
       const poiSpan = document.createElement("span");
       poiSpan.className = "icon";
       poiSpan.textContent = "📍";
@@ -92,7 +114,11 @@ export function initRenderer(world, metadata, stats, options = {}) {
     // Predator icon (🦈 top-left)
     // threat_level >= 3 from life.csv
     // -----------------------
-    if (cell.life && cell.life.some(sp => Number(sp.threat_level) >= 3)) {
+    if (
+      canShowIcons &&
+      cell.life &&
+      cell.life.some((sp) => Number(sp.threat_level) >= 3)
+    ) {
       const predatorSpan = document.createElement("span");
       predatorSpan.className = "predator-icon";
       predatorSpan.textContent = "🦈";
@@ -119,7 +145,7 @@ export function initRenderer(world, metadata, stats, options = {}) {
   }
 
   function setPlayerPosition(row, col) {
-    // main.js updates playerState first, we just redraw
+    // main.js updates playerState & visibility; we just redraw
     redrawAll();
   }
 

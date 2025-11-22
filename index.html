@@ -306,43 +306,17 @@
       overflow: auto;
     }
 
-        /* ===========================
-       GAME OVER OVERLAY
+     /* ===========================
+       FOG OF WAR / SONAR
        =========================== */
-    #game-over-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.9);
-      display: none;               /* hidden until game over */
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-      color: #00ffcc;
-      font-family: "Courier New", monospace;
+    .fog-unknown {
+      background-color: #000000 !important;
+      border-color: #000000 !important;
     }
 
-    .game-over-box {
-      border: 2px solid #00ffcc;
-      border-radius: 8px;
-      padding: 20px 30px;
-      text-align: center;
-      background: #050510;
-      box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
+    .fog-seen {
+      filter: brightness(0.4);
     }
-
-    .game-over-box h1 {
-      margin-top: 0;
-      margin-bottom: 10px;
-      font-size: 28px;
-      color: #ff4c4c;
-      text-shadow: 0 0 10px #ff4c4c;
-    }
-
-    .game-over-box p {
-      margin-bottom: 20px;
-      font-size: 14px;
-    }
-
   </style>
 </head>
 <body>

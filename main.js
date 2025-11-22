@@ -50,6 +50,60 @@ let missionTimeRemaining = 0;
 // Game over state
 let gameOver = false;
 
+// Visibility grid for fog of war / sonar
+let visibility = null;
+
+/**
+ * Initialize the visibility grid: [rows][cols] with discovered/visible flags.
+ */
+function initVisibility(rows, cols) {
+  visibility = new Array(rows);
+  for (let r = 0; r < rows; r++) {
+    visibility[r] = new Array(cols);
+    for (let c = 0; c < cols; c++) {
+      visibility[r][c] = {
+        discovered: false, // has this tile ever been in sonar?
+        visible: false,    // currently in sonar radius?
+      };
+    }
+  }
+}
+
+/**
+ * Update which tiles are visible based on the submarine's position.
+ * Sonar reveals a radius around the sub and remembers tiles as "discovered".
+ */
+function updateVisibilityAroundPlayer() {
+  if (!metadata || !visibility) return;
+
+  const rows = metadata.grid.rows;
+  const cols = metadata.grid.cols;
+  const radius = 5; // sonar radius in tiles (tweak if needed)
+
+  // First: mark everything as not currently visible
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      visibility[r][c].visible = false;
+    }
+  }
+
+  // Then reveal a circle around the sub
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
+      const rr = playerState.row + dr;
+      const cc = playerState.col + dc;
+
+      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+
+      const dist = Math.sqrt(dr * dr + dc * dc);
+      if (dist <= radius) {
+        visibility[rr][cc].visible = true;
+        visibility[rr][cc].discovered = true;
+      }
+    }
+  }
+}
+
 /**
  * Show the game over overlay and stop further movement.
  */
@@ -372,8 +426,11 @@ function movePlayer(dRowInput, dColInput) {
   if (newRow >= metadata.grid.rows) newRow = metadata.grid.rows - 1;
   if (newCol >= metadata.grid.cols) newCol = metadata.grid.cols - 1;
 
-  playerState.row = newRow;
+   playerState.row = newRow;
   playerState.col = newCol;
+
+  // 🔹 Update sonar / fog-of-war
+  updateVisibilityAroundPlayer();
 
   const cell = getCell(world, newRow, newCol);
   updateHUDFromCell(cell);
@@ -383,6 +440,7 @@ function movePlayer(dRowInput, dColInput) {
   handlePredators(cell);
   if (checkBiomeFacts) checkBiomeFacts(world, newRow, newCol);
   checkMissionProgress(cell);
+
 }
 
 /*-------------------------------------------
@@ -410,19 +468,27 @@ function movePlayer(dRowInput, dColInput) {
     playerState.row = mid;
     playerState.col = mid;
 
-    // Init renderer
+    // 🔹 Initialize fog-of-war grid and do first sonar ping
+    initVisibility(metadata.grid.rows, metadata.grid.cols);
+    updateVisibilityAroundPlayer();
+
+    // Init renderer (now with visibility)
     renderer = initRenderer(world, metadata, stats, {
       playerState,
+      visibility,
       onCellSelected: (cell, row, col) => {
         playerState.row = row;
         playerState.col = col;
+        updateVisibilityAroundPlayer();    // keep fog consistent on click
         updateHUDFromCell(cell);
         renderer.setPlayerPosition(row, col);
         handleHazards(cell);
+        handlePredators(cell);
         if (checkBiomeFacts) checkBiomeFacts(world, row, col);
         checkMissionProgress(cell);
       },
     });
+
 
     const startCell = getCell(world, playerState.row, playerState.col);
     updateHUDFromCell(startCell);
